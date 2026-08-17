@@ -1,51 +1,48 @@
+const { Resend } = require("resend");
 const nodemailer = require("nodemailer");
-const sparkPostTransport = require("nodemailer-sparkpost-transport");
 const pug = require("pug");
 
 class Email {
   constructor() {
-    this.prodTransporter = nodemailer.createTransport(
-      sparkPostTransport({
-        sparkPostApiKey: "",
-        endpoint: "https://api.eu.sparkpost.com"
-      })
-    );
+    this.resend = new Resend(process.env.RESEND_API_KEY);
     this.devTransporter = nodemailer.createTransport({
-      host: "smtp.mailtrap.io",
+      host: "sandbox.smtp.mailtrap.io",
       port: 2525,
       auth: {
-        user: "2b12eba88d4e55",
-        pass: "8b5337745d35d6"
+        user: process.env.MAILTRAP_USER,
+        pass: process.env.MAILTRAP_PASS
       }
     });
   }
 
   async getTemplate(templateName, options, prod = false) {
-    try {
-      const template = pug.renderFile(
-        `./email-templates/${templateName}.pug`,
-        options.metaData
-      );
-      let data;
-      if (prod) {
-        data = await this.prodTransporter.sendMail({
-          from: "Dyma-projects <no-reply@dyma-projects.site>",
-          to: options.to,
-          subject: options.subject,
-          html: template
-        });
-      } else {
-        data = await this.devTransporter.sendMail({
-          from: "Dyma-projects <no-reply@dyma-projects.site>",
-          to: options.to,
-          subject: options.subject,
-          html: template
-        });
+    const template = pug.renderFile(
+      `./email-templates/${templateName}.pug`,
+      options.metaData
+    );
+    const from = "Dyma-projects <no-reply@dyma-projects.site>";
+
+    if (prod) {
+      const { data, error } = await this.resend.emails.send({
+        from,
+        to: [options.to],
+        subject: options.subject,
+        html: template
+      });
+      if (error) {
+        throw error;
       }
       console.log("EMAIL OK ! : ", data);
-    } catch (e) {
-      throw new Error(e);
+      return;
     }
+
+    const info = await this.devTransporter.sendMail({
+      from,
+      to: options.to,
+      subject: options.subject,
+      html: template
+    });
+    console.log("EMAIL OK ! : ", info);
   }
 }
 
